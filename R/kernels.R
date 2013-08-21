@@ -6,6 +6,12 @@
 ##' Generalized Gaussian kernel
 ##'
 ##' The un-normalized Gaussian kernel function: exp(-(abs(x/bw))^delta)/bw
+##'
+##' The bandwidth parameter may be used in any way that makes sense in
+##' the above R expression. In particular, it may be a single value,
+##' for a constant bandwidth, or a vector, with each element
+##' corresponding the bandwidth of the kernel to be placed at each
+##' respective observation.
 ##' 
 ##' @param x places to evaluate kernel
 ##' @param bw bandwidth values

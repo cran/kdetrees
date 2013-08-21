@@ -16,8 +16,8 @@
   Plot the unnormalized density estimates for each tree.
 }
 \examples{
-fit <- kdetrees(apicomplexa,12,use.blen=TRUE)
-plot(fit)
+result <- kdetrees(apicomplexa)
+plot(result)
 }
 \author{
   Grady Weyenberg

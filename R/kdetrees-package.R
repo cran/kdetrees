@@ -2,13 +2,17 @@
 ##' 
 ##' @docType package
 ##' @name kdetrees-package
-##' @import ape phangorn ggplot2
-##' 
+##' @importFrom ape cophenetic.phylo unroot compute.brlen root write.tree read.tree
+##' @importFrom distory dist.multiPhylo
+##' @import ggplot2
 NULL
+
 
 ##' Apicomplexa gene trees sample data set.
 ##' 
 ##' @name apicomplexa
 ##' @docType data
 ##' @format a multiPhylo object with 268 phylogenetic trees
+##' @examples
+##' kdetrees(apicomplexa)
 NULL

@@ -1,81 +1,114 @@
-##' Identify discordant trees in a sample
-##'
+##' Analyze a set of phylogenetic trees and attempt to identify trees
+##' which are significantly discordant with other trees in the sample
+##' (outlier trees).
+##' 
 ##' If bw is a single number, it will be used as a single constant
 ##' bandwidth. It can also be a vector, in which case it will be used
-##' as variable bandwidths. Finally, if it is a list, the list will be
-##' passed as arguments to the bw.nn adaptive bandwith function.
-##' 
+##' as variable bandwidths for each tree, repectively. Finally, if it
+##' is a list (default), the list will be passed as arguments to the bw.nn
+##' adaptive bandwith function.
+##'
+##' ... Is passed to either \code{distory::dist.multiPhylo} or
+##' \code{dist.diss}, as appropriate. See the help for these functions
+##' for more details.
+##'
+##' @title Identify discordant trees in a sample
 ##' @param trees multiPhylo object
-##' @param n number of outliers to report
+##' @param k IQR multiplier for outlier detection
+##' @param distance Select "geodesic" or "dissimilarity" distance
+##' calculation method
+##' @param outgroup if a character, reroot all trees with this species
+##' as outgroup. The geodesic distance method requires rooted trees.
+##' @param topo.only set all branch lengths to 1 before analyzing?
 ##' @param bw see Details
-##' @param ... additional arguments for dist.diss
-##' @return a kdetrees object; list(density,outliers,bandwidth)
+##' @param greedy greedy outlier detection?
+##' @param ... additional arguments for distance calculation function, see details
+##' @return a kdetrees object; list(density,outliers)
 ##' @author Grady Weyenberg
 ##' @export
-kdetrees <- function(trees,n=ceiling(0.05*length(trees)),bw=list(),...){
-  dm <- dist.diss(trees,...)
+##' @examples
+##' kdeobj <- kdetrees(apicomplexa)
+##' print(kdeobj)
+##' kdeobj$outliers
+##'
+##' kdetrees(apicomplexa, k=2.0, distance="dissimilarity",topo.only=FALSE)
+kdetrees <- function(trees,k=1.5,distance=c("geodesic","dissimilarity"), outgroup=NULL,
+                     topo.only=FALSE,bw=list(),greedy=FALSE,...) {
+  distance <- match.arg(distance)
+  browser()
+  if (!inherits(trees,"multiPhylo") && all(sapply(trees,inherits,"phylo"))) class(trees) <- "multiPhylo"
+
+  if (topo.only) {
+    trees <- lapply(trees,compute.brlen, method = 1)
+    class(trees) <- "multiPhylo"
+  }
+  
+  if (is.character(outgroup)) {
+    trees <- lapply(trees,root,outgroup,resolve.root=TRUE)
+    trees <- lapply(trees,"[<-","node.label", NULL)
+    class(trees) <- "multiPhylo"
+  }
+
+  dm <- switch(distance,
+               geodesic = as.matrix(dist.multiPhylo(trees,...)),
+               dissimilarity = as.matrix(dist.diss(trees,...)))
+  dimnames(dm) <- list(names(trees),names(trees))
+
+  cutoff <- function(x, c = 1.5){
+    qs <- quantile(x, c(0.25,0.75))
+    unname(diff(qs) * -c + qs[1])
+  }
+  
   if(is.list(bw)) bw <- do.call(bw.nn,c(list(dm),bw))
   km <- normkern(dm,bw)
-  i <- which.min(estimate(km))
-  while(length(i) < n){
-    j <- which.min(estimate(km[-i,-i]))
-    j[1] <- match(names(j),rownames(km))
-    i <- c(i,j)
+  x <- estimate(km)
+  c <- cutoff(x, k)
+  i <- which( x < c )
+  if (greedy) {
+    while(TRUE){
+      i <- which( x < c )
+      if (length(i) < 1) break
+      x <- estimate(km,i)
+      c2 <- cutoff(x[-i], k)
+      if(is.na(c2)) browser()
+      if(c2 > c) c <- c2 else break
+    }
   }
-  est <- estimate(km,i)
-  out <- list(density=est,outliers=i,bandwidth=bw)
-  class(out) <- "kdetrees"
-  out
+  structure(list(density=x, i=i, outliers=trees[i]), class="kdetrees",
+            call=match.call(), c=c)
 }
 
-##' Plot the unnormalized density estimates for each tree.
+
+##' Performs a complete kdetrees analysis, starting with reading trees
+##' from a newick file on disk, and writing result files to the
+##' working directory. Names and location of output files may be
+##' controlled by optional arguments.
 ##'
-##' @param x kdetrees object to be plotted
-##' @param ... additional arguments passed to ggplot
-##' @return a ggplot object
+##' @title Complete kdetrees analysis convenience function
+##' @param infile newick file with trees
+##' @param ... additional parameters for kdetrees
+##' @param treeoutfile write outlier trees in newick format to this file
+##' @param csvfile write density results to this file
+##' @param plotfile print scatterplot of results to this file
+##' @param histfile print histogram of density estimates to this file
+##' @return result of kdetrees call
 ##' @author Grady Weyenberg
 ##' @export
-##' @method plot kdetrees
-##' @examples
-##' fit <- kdetrees(apicomplexa,12,use.blen=TRUE)
-##' plot(fit)
-plot.kdetrees <- function(x,...){
-  df <- with(x,data.frame(density=unname(density),
-                          tree=names(density),
-                          index=seq_along(density),
-                          outlier=seq_along(density)%in%outliers))
-  ylab <- "Non-normalized Density"
-  xlab <- "Tree Index"
-  main <- paste(length(x$outliers),"Outliers Removed")
+kdetrees.complete <- function(infile,...,treeoutfile="outliers.tre",
+                              csvfile="results.csv",plotfile="plot.png",
+                              histfile="hist.png"){
+  trees <- read.tree(file)
+  if (is.null(names(trees))) names(trees) <- paste("tree",seq_along(trees),sep="")
+  if (!inherits(trees,"multiPhylo")) stop("Could not read tree file")
   
-  ggplot(df,aes(index,density,color=outlier),...) + geom_point() +
-    labs(title=main, x=xlab,y=ylab) + theme(legend.position="top")
-}
-
-
-##' Create a histogram of tree density estimates
-##' 
-##' @param x kdetrees object to plot
-##' @param ... additional arguments passed to ggplot
-##' @return a ggplot object
-##' @author Grady Weyenberg
-##' @export
-##' @method hist kdetrees
-##' @examples
-##' fit <- kdetrees(apicomplexa,12,use.blen=TRUE)
-##' hist(fit)
-hist.kdetrees <- function(x,...){
-  df <- with(x,data.frame(density=unname(density),
-                          tree=names(density),
-                          index=seq_along(density),
-                          outlier=seq_along(density)%in%outliers))
-  bw <- with(x,diff(range(density))/nclass.FD(density))
-  main <- paste("Histogram of Estimates:",length(x$outliers),"Outliers Removed")
-  xlab <- "Non-normalized Density"
-  ylab <- "Count"
-
-  ggplot(df,aes(density,fill=outlier),...) + geom_histogram(binwidth=bw) +
-    labs(title=main,x=xlab,y=ylab) + theme(legend.position="top")
+  res <- kdetrees(trees,...)
+  if (is.character(plotfile)) ggsave(plotfile,plot(res)) #scatterplot
+  if (is.character(histfile)) ggsave(histfile,hist(res)) #histogram
+  if (is.character(csvfile)) write.csv(as.data.frame(res),csvfile) #csv
+  if (is.character(treeoutfile) && length(res$outliers) > 0)
+    write.tree(res$outliers, treeoutfile, tree.names=TRUE,digits=5) #out-trees
+  
+  res
 }
 
 ##' estimate densities from kernel matrix
@@ -91,5 +124,5 @@ estimate <- function(x,i=integer()){
     rowSums(x) - diag(x)
 }
 
-## Suppress the NOTES from R CMD check about undefined variables
-globalVariables(c("outlier","index"))
+
+
