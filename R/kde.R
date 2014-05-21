@@ -1,3 +1,5 @@
+### Copyright (C) 2014 -- Grady Weyenberg ###
+
 ##' Analyze a set of phylogenetic trees and attempt to identify trees
 ##' which are significantly discordant with other trees in the sample
 ##' (outlier trees).
@@ -35,7 +37,6 @@
 kdetrees <- function(trees,k=1.5,distance=c("geodesic","dissimilarity"), outgroup=NULL,
                      topo.only=FALSE,bw=list(),greedy=FALSE,...) {
   distance <- match.arg(distance)
-  browser()
   if (!inherits(trees,"multiPhylo") && all(sapply(trees,inherits,"phylo"))) class(trees) <- "multiPhylo"
 
   if (topo.only) {
@@ -70,7 +71,7 @@ kdetrees <- function(trees,k=1.5,distance=c("geodesic","dissimilarity"), outgrou
       if (length(i) < 1) break
       x <- estimate(km,i)
       c2 <- cutoff(x[-i], k)
-      if(is.na(c2)) browser()
+      ## if(is.na(c2)) browser()
       if(c2 > c) c <- c2 else break
     }
   }
@@ -97,7 +98,7 @@ kdetrees <- function(trees,k=1.5,distance=c("geodesic","dissimilarity"), outgrou
 kdetrees.complete <- function(infile,...,treeoutfile="outliers.tre",
                               csvfile="results.csv",plotfile="plot.png",
                               histfile="hist.png"){
-  trees <- read.tree(file)
+  trees <- read.tree(infile)
   if (is.null(names(trees))) names(trees) <- paste("tree",seq_along(trees),sep="")
   if (!inherits(trees,"multiPhylo")) stop("Could not read tree file")
   
